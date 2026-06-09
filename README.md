@@ -19,6 +19,7 @@
 ## 参考
 本项目参考自[xiaofan9](https://github.com/xiaofan9/echarts-china-map)
 
-## 预览地址
+## 效果预览
+![示意图](example.jpg)
 
 
