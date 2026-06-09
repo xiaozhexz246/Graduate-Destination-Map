@@ -20,6 +20,7 @@
 本项目参考自[xiaofan9](https://github.com/xiaofan9/echarts-china-map)
 
 ## 效果预览
-![示意图](example.jpg)
+![index示意图](example1.jpg)
+![class示意图](example.jpg)
 
 
