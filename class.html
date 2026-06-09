@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>China Student Map</title>
+    <style>
+      :root {
+        --paper: #ffffff;
+        --ink: #302824;
+        --muted: #6f655d;
+        --line: rgba(48, 40, 36, 0.12);
+        --panel: rgba(255, 255, 255, 0.9);
+        --shadow: 0 16px 42px rgba(68, 55, 43, 0.04);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        font-family: "Georgia", "Times New Roman", "Noto Serif SC", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top, rgba(247, 247, 247, 0.9), transparent 36%),
+          linear-gradient(180deg, #ffffff 0%, #fcfcfc 52%, #fafafa 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.35;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)),
+          repeating-linear-gradient(
+            90deg,
+            transparent,
+            transparent 11px,
+            rgba(48, 40, 36, 0.012) 12px
+          );
+      }
+
+      .page {
+        position: relative;
+        max-width: 1680px;
+        margin: 0 auto;
+        padding: 18px;
+      }
+
+      .canvas {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        min-height: 760px;
+        padding: 26px 28px 24px;
+        border-radius: 26px;
+        background:
+          radial-gradient(circle at top, rgba(247, 247, 247, 0.76), transparent 34%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(252, 252, 252, 0.98) 52%, rgba(250, 250, 250, 0.98) 100%);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .canvas::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.74), transparent 22%),
+          radial-gradient(circle at 88% 14%, rgba(89, 67, 54, 0.035), transparent 22%);
+      }
+
+      .canvas.exporting {
+        background: #ffffff;
+        box-shadow: none;
+      }
+
+      .canvas.exporting::before {
+        content: none;
+      }
+
+      .hero {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 24px;
+        margin-bottom: 10px;
+      }
+
+      .hero-copy {
+        padding-top: 12px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0.42em;
+        text-transform: uppercase;
+        color: rgba(48, 40, 36, 0.52);
+      }
+
+      .subhead {
+        margin: 8px 0 0;
+        font-size: 34px;
+        line-height: 0.95;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: rgba(48, 40, 36, 0.72);
+      }
+
+      .title-wrap {
+        text-align: right;
+      }
+
+      .title-wrap h1 {
+        margin: 0;
+        font-size: clamp(58px, 8vw, 106px);
+        line-height: 0.9;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+      }
+
+      .title-wrap p {
+        margin: 8px 0 0;
+        font-size: 14px;
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .layout {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: minmax(640px, 1.35fr) minmax(520px, 1.05fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .map-panel {
+        position: relative;
+        min-height: 0;
+        padding: 6px 6px 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        overflow: hidden;
+      }
+
+      .map-panel::before {
+        content: none;
+      }
+
+      .toolbar {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2px;
+      }
+
+      .back-btn {
+        appearance: none;
+        border: 1px solid rgba(48, 40, 36, 0.18);
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+        transition: transform 160ms ease, background 160ms ease;
+      }
+
+      .back-btn:hover {
+        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 1);
+      }
+
+      .back-btn[hidden] {
+        display: none;
+      }
+
+      .export-btn {
+        position: absolute;
+        right: 24px;
+        bottom: 22px;
+        z-index: 4;
+      }
+
+      .canvas.exporting .export-btn {
+        display: none;
+      }
+
+      #china-map.exporting-map > * {
+        opacity: 0 !important;
+      }
+
+      #china-map.exporting-map .export-map-image {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 1 !important;
+        pointer-events: none;
+        z-index: 3;
+      }
+
+      .summary {
+        display: none;
+      }
+
+      .summary strong {
+        display: none;
+      }
+
+      #china-map {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 720px;
+      }
+
+      .legend-panel {
+        position: relative;
+        align-self: stretch;
+        padding: 0 4px 0 20px;
+        border-radius: 0;
+        border: none;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .legend-panel h2 {
+        margin: 0;
+        font-size: 17px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .student-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 14px 8px;
+        align-content: start;
+        min-height: 720px;
+        padding-top: 8px;
+      }
+
+      .student-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .student-photo {
+        width: 88px;
+        height: 110px;
+        object-fit: cover;
+        object-position: center;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #f6f2ee 0%, #ebe2db 100%);
+        box-shadow: 0 6px 14px rgba(48, 40, 36, 0.08);
+      }
+
+      .student-name {
+        margin-top: 7px;
+        font-size: 18px;
+        line-height: 1.08;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .student-origin,
+      .student-destination {
+        margin-top: 2px;
+        font-size: 12px;
+        line-height: 1.22;
+        color: var(--muted);
+      }
+
+      .student-destination {
+        margin-top: 1px;
+      }
+
+      @media (max-width: 1200px) {
+        .canvas {
+          aspect-ratio: auto;
+          min-height: 0;
+        }
+
+        .layout {
+          grid-template-columns: 1fr;
+          gap: 18px;
+        }
+
+        #china-map {
+          height: 620px;
+        }
+
+        .legend-panel {
+          padding-left: 0;
+        }
+
+        .student-grid {
+          min-height: 0;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          padding: 10px;
+        }
+
+        .canvas {
+          padding: 18px 14px 18px;
+          border-radius: 18px;
+        }
+
+        .hero {
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .title-wrap {
+          text-align: left;
+        }
+
+        .subhead {
+          font-size: 24px;
+        }
+
+        .toolbar {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 10px;
+        }
+
+        .summary {
+          flex-wrap: wrap;
+          gap: 10px 16px;
+        }
+
+        .map-panel {
+          padding: 6px 0 0;
+        }
+
+        #china-map {
+          height: 500px;
+        }
+
+        .export-btn {
+          right: 14px;
+          bottom: 14px;
+        }
+
+        .student-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 16px 10px;
+        }
+
+        .student-photo {
+          width: 84px;
+          height: 106px;
+        }
+
+        .student-name {
+          font-size: 17px;
+        }
+
+        .student-origin,
+        .student-destination {
+          font-size: 12px;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .student-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+    <script src="https://unpkg.com/echarts/dist/echarts.min.js"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="./js/map/china.js"></script>
+  </head>
+
+  <body>
+    <div class="page">
+      <div class="canvas" id="export-canvas">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Origin Distribution</p>
+          <p class="subhead">Every Part Of The Land<br />Sees Our Students There</p>
+        </div>
+        <div class="title-wrap">
+          <h1>CHINA</h1>
+          <p>Student Native Place Atlas</p>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="map-panel">
+          <div class="toolbar">
+            <button id="back" class="back-btn" hidden>返回全国</button>
+            <div class="summary">
+              <div>学生总数<strong id="student-count">0</strong></div>
+              <div>覆盖省份<strong id="province-count">0</strong></div>
+            </div>
+          </div>
+          <div id="china-map"></div>
+        </section>
+
+        <aside class="legend-panel">
+          <h2>Students List</h2>
+          <!-- <p class="caption">
+            右侧按省份分组展示姓名与城市，地图会根据人数高亮对应省份。
+          </p> -->
+          <div id="province-list" class="student-grid"></div>
+        </aside>
+      </main>
+      <button id="export-image" class="back-btn export-btn">导出图片</button>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var mapNode = document.getElementById("china-map");
+        var chart = echarts.init(mapNode);
+        var backButton = document.getElementById("back");
+        var exportButton = document.getElementById("export-image");
+        var exportCanvasNode = document.getElementById("export-canvas");
+        var provinceList = document.getElementById("province-list");
+        var studentCountNode = document.getElementById("student-count");
+        var provinceCountNode = document.getElementById("province-count");
+
+        var provinceScriptMap = {
+          上海: "shanghai",
+          河北: "hebei",
+          山西: "shanxi",
+          内蒙古: "neimenggu",
+          辽宁: "liaoning",
+          吉林: "jilin",
+          黑龙江: "heilongjiang",
+          江苏: "jiangsu",
+          浙江: "zhejiang",
+          安徽: "anhui",
+          福建: "fujian",
+          江西: "jiangxi",
+          山东: "shandong",
+          河南: "henan",
+          湖北: "hubei",
+          湖南: "hunan",
+          广东: "guangdong",
+          广西: "guangxi",
+          海南: "hainan",
+          四川: "sichuan",
+          贵州: "guizhou",
+          云南: "yunnan",
+          西藏: "xizang",
+          陕西: "shanxi1",
+          甘肃: "gansu",
+          青海: "qinghai",
+          宁夏: "ningxia",
+          新疆: "xinjiang",
+          北京: "beijing",
+          天津: "tianjin",
+          重庆: "chongqing",
+          香港: "xianggang",
+          澳门: "aomen",
+          台湾: "taiwan"
+        };
+
+        var palette = [
+          "#c69e85",
+          "#d8b287",
+          "#caa77a",
+          "#8fa7a0",
+          "#95a9c6",
+          "#d5a9a2",
+          "#c2b59b",
+          "#a6b29f",
+          "#b6a0bc",
+          "#d7c38a",
+          "#9fbaa5",
+          "#d3b0b6"
+        ];
+
+        var provinceEnglishMap = {
+          "上海": "SHANGHAI",
+          "河北": "HEBEI",
+          "山西": "SHANXI",
+          "内蒙古": "INNER MONGOLIA",
+          "辽宁": "LIAONING",
+          "吉林": "JILIN",
+          "黑龙江": "HEILONGJIANG",
+          "江苏": "JIANGSU",
+          "浙江": "ZHEJIANG",
+          "安徽": "ANHUI",
+          "福建": "FUJIAN",
+          "江西": "JIANGXI",
+          "山东": "SHANDONG",
+          "河南": "HENAN",
+          "湖北": "HUBEI",
+          "湖南": "HUNAN",
+          "广东": "GUANGDONG",
+          "广西": "GUANGXI",
+          "海南": "HAINAN",
+          "四川": "SICHUAN",
+          "贵州": "GUIZHOU",
+          "云南": "YUNNAN",
+          "西藏": "TIBET",
+          "陕西": "SHAANXI",
+          "甘肃": "GANSU",
+          "青海": "QINGHAI",
+          "宁夏": "NINGXIA",
+          "新疆": "XINJIANG",
+          "北京": "BEIJING",
+          "天津": "TIANJIN",
+          "重庆": "CHONGQING",
+          "香港": "HONG KONG",
+          "澳门": "MACAO",
+          "台湾": "TAIWAN"
+        };
+
+        var loadedScripts = {};
+        var currentView = { mapType: "china", label: "中国" };
+        var activeProvinceData = [];
+        var nationalData = [];
+        var studentCards = [];
+        var photoExtensionMap = {
+          B22012615: ".jpg",
+          Q22010101: ".jpeg",
+          Q22010102: ".png",
+          Q22010103: ".jpeg",
+          Q22010104: ".jpeg",
+          Q22010105: ".jpg",
+          Q22010106: ".png",
+          Q22010107: ".jpeg",
+          Q22010108: ".jpg",
+          Q22010111: ".jpg",
+          Q22010112: ".png",
+          Q22010113: ".png",
+          Q22010114: ".jpg",
+          Q22010115: ".jpeg",
+          Q22010116: ".jpg",
+          Q22010117: ".png",
+          Q22010118: ".jpg",
+          Q22010119: ".png"
+        };
+
+        function normalizeProvince(nativePlace) {
+          if (!nativePlace) {
+            return "";
+          }
+          var specialCases = [
+            ["内蒙古", "内蒙古"],
+            ["广西", "广西"],
+            ["宁夏", "宁夏"],
+            ["新疆", "新疆"],
+            ["西藏", "西藏"],
+            ["香港", "香港"],
+            ["澳门", "澳门"]
+          ];
+          for (var i = 0; i < specialCases.length; i += 1) {
+            if (nativePlace.indexOf(specialCases[i][0]) === 0) {
+              return specialCases[i][1];
+            }
+          }
+          var suffixes = ["省", "市", "自治区", "特别行政区"];
+          for (var j = 0; j < suffixes.length; j += 1) {
+            var index = nativePlace.indexOf(suffixes[j]);
+            if (index !== -1) {
+              return nativePlace.slice(0, index);
+            }
+          }
+          return nativePlace.slice(0, 2);
+        }
+
+        function extractCity(nativePlace, provinceName) {
+          if (!nativePlace) {
+            return "";
+          }
+          if (nativePlace === provinceName || nativePlace === provinceName + "市") {
+            return nativePlace;
+          }
+          var cityPart = nativePlace.replace(provinceName, "");
+          cityPart = cityPart.replace(/^省|^市|^自治区|^特别行政区/, "");
+          return cityPart || nativePlace;
+        }
+
+        function colorForIndex(index) {
+          return palette[index % palette.length];
+        }
+
+        function englishProvinceName(name) {
+          return provinceEnglishMap[name] || String(name || "").toUpperCase();
+        }
+
+        function toneColor(hex, amount) {
+          var value = hex.replace("#", "");
+          var r = parseInt(value.slice(0, 2), 16);
+          var g = parseInt(value.slice(2, 4), 16);
+          var b = parseInt(value.slice(4, 6), 16);
+
+          function mix(channel) {
+            return Math.max(0, Math.min(255, Math.round(channel + (255 - channel) * amount)));
+          }
+
+          return "rgb(" + mix(r) + "," + mix(g) + "," + mix(b) + ")";
+        }
+
+        function parseWorkbook(buffer) {
+          var workbook = XLSX.read(buffer, { type: "array" });
+          var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          return XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+        }
+
+        function resolvePhotoPath(studentId) {
+          var ext = photoExtensionMap[studentId] || "";
+          return ext ? "./pic/Q220101/" + studentId + ext : "";
+        }
+
+        function buildProvinceGroups(rows) {
+          var groups = {};
+          rows.forEach(function (row) {
+            var studentId = String(row["学号"] || "").trim();
+            var name = String(row["姓名"] || "").trim();
+            var nativePlace = String(row["籍贯"] || "").trim();
+            var destination = String(row["去向"] || "").trim();
+            if (!studentId || !name || !nativePlace) {
+              return;
+            }
+
+            var provinceName = normalizeProvince(nativePlace);
+            if (!provinceName) {
+              return;
+            }
+            if (!groups[provinceName]) {
+              groups[provinceName] = [];
+            }
+            groups[provinceName].push({
+              id: studentId,
+              name: name,
+              nativePlace: nativePlace,
+              city: extractCity(nativePlace, provinceName),
+              destination: destination,
+              photo: resolvePhotoPath(studentId)
+            });
+          });
+
+          return Object.keys(groups)
+            .sort(function (a, b) {
+              var diff = groups[b].length - groups[a].length;
+              if (diff !== 0) {
+                return diff;
+              }
+              return a.localeCompare(b, "zh-Hans-CN");
+            })
+            .map(function (provinceName, index) {
+              return {
+                provinceName: provinceName,
+                count: groups[provinceName].length,
+                color: colorForIndex(index),
+                mapKey: provinceScriptMap[provinceName] || "",
+                registeredMapName: provinceName,
+                students: groups[provinceName]
+              };
+            });
+        }
+
+        function buildStudentCards(rows) {
+          return rows
+            .map(function (row) {
+              var studentId = String(row["学号"] || "").trim();
+              var name = String(row["姓名"] || "").trim();
+              var nativePlace = String(row["籍贯"] || "").trim();
+              var destination = String(row["去向"] || "").trim();
+              if (!studentId || !name || !nativePlace) {
+                return null;
+              }
+              return {
+                id: studentId,
+                name: name,
+                nativePlace: nativePlace,
+                destination: destination,
+                photo: resolvePhotoPath(studentId)
+              };
+            })
+            .filter(Boolean);
+        }
+
+        function renderSidebar(students) {
+          provinceList.innerHTML = students
+            .map(function (student) {
+              return (
+                '<article class="student-card">' +
+                '<img class="student-photo" src="' +
+                escapeHtml(student.photo) +
+                '" alt="' +
+                escapeHtml(student.name) +
+                '证件照" loading="lazy" onerror="this.style.visibility=\'hidden\'" />' +
+                '<div class="student-name">' +
+                escapeHtml(student.name) +
+                "</div>" +
+                '<div class="student-origin">' +
+                escapeHtml(student.nativePlace) +
+                "</div>" +
+                '<div class="student-destination">' +
+                escapeHtml(student.destination || "") +
+                "</div>" +
+                "</article>"
+              );
+            })
+            .join("");
+        }
+
+        function escapeHtml(text) {
+          return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+
+        function buildMapData(groups) {
+          return groups.map(function (group) {
+            return {
+              name: group.provinceName,
+              value: group.count,
+              itemStyle: {
+                areaColor: group.color
+              },
+              group: group
+            };
+          });
+        }
+
+        function updateSummary(groups) {
+          var studentTotal = groups.reduce(function (sum, group) {
+            return sum + group.count;
+          }, 0);
+          studentCountNode.textContent = String(studentTotal);
+          provinceCountNode.textContent = String(groups.length);
+        }
+
+        function renderChinaMap() {
+          currentView = { mapType: "china", label: "中国" };
+          backButton.hidden = true;
+
+          var option = {
+            backgroundColor: "transparent",
+            tooltip: {
+              trigger: "item",
+              formatter: function (params) {
+                var value = params.value || 0;
+                return params.name + "<br/>学生人数: " + value;
+              }
+            },
+            series: [
+              {
+                name: "生源地分布",
+                type: "map",
+                map: "china",
+                roam: true,
+                zoom: 0.96,
+                top: 26,
+                left: 32,
+                right: 42,
+                bottom: 18,
+                selectedMode: false,
+                emphasis: {
+                  label: {
+                    show: true,
+                    color: "#231d1a",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    formatter: function (params) {
+                      return englishProvinceName(params.name);
+                    }
+                  },
+                  itemStyle: {
+                    areaColor: "#d7c7b7"
+                  }
+                },
+                label: {
+                  show: true,
+                  formatter: function (params) {
+                    return englishProvinceName(params.name);
+                  },
+                  color: "rgba(48, 40, 36, 0.72)",
+                  fontSize: 9,
+                  fontWeight: 700,
+                  align: "center"
+                },
+                itemStyle: {
+                  areaColor: "#ffffff",
+                  borderColor: "rgba(25, 21, 18, 0.72)",
+                  borderWidth: 1.9
+                },
+                regions: nationalData.map(function (item) {
+                  return {
+                    name: item.name,
+                    itemStyle: {
+                      areaColor: item.group.color,
+                      borderColor: "rgba(25, 21, 18, 0.72)",
+                      borderWidth: 1.9
+                    },
+                    emphasis: {
+                      itemStyle: {
+                        areaColor: item.group.color
+                      }
+                    },
+                    label: {
+                      color: "#2b241f"
+                    }
+                  };
+                }),
+                data: nationalData
+              }
+            ]
+          };
+
+          chart.clear();
+          chart.setOption(option);
+        }
+
+        function renderProvinceMap(group) {
+          if (!group || !group.mapKey) {
+            return;
+          }
+          currentView = { mapType: group.registeredMapName, label: group.provinceName };
+          backButton.hidden = false;
+          backButton.textContent = "返回全国";
+
+          var option = {
+            backgroundColor: "transparent",
+            tooltip: {
+              trigger: "item",
+              formatter: function (params) {
+                return params.name || group.provinceName;
+              }
+            },
+            series: [
+              {
+                type: "map",
+                map: group.registeredMapName,
+                roam: true,
+                zoom: 1.02,
+                top: 24,
+                left: 12,
+                right: 12,
+                bottom: 12,
+                label: {
+                  show: true,
+                  formatter: function (params) {
+                    return englishProvinceName(params.name);
+                  },
+                  color: "rgba(48, 40, 36, 0.72)",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  align: "center"
+                },
+                emphasis: {
+                  label: {
+                    color: "#201a17"
+                  },
+                  itemStyle: {
+                    areaColor: toneColor(group.color, 0.18)
+                  }
+                },
+                itemStyle: {
+                  areaColor: toneColor(group.color, 0.08),
+                  borderColor: "rgba(24, 20, 17, 0.74)",
+                  borderWidth: 1.8
+                }
+              }
+            ],
+            graphic: [
+              {
+                type: "text",
+                right: 26,
+                top: 18,
+                style: {
+                  text: englishProvinceName(group.provinceName),
+                  fill: "rgba(48, 40, 36, 0.7)",
+                  font: "700 26px Georgia"
+                }
+              },
+              {
+                type: "text",
+                right: 26,
+                top: 52,
+                style: {
+                  text: "Students: " + group.count,
+                  fill: "rgba(48, 40, 36, 0.48)",
+                  font: "14px Georgia"
+                }
+              }
+            ]
+          };
+
+          chart.clear();
+          chart.setOption(option);
+        }
+
+        function loadProvinceScript(group) {
+          if (!group || !group.mapKey) {
+            return Promise.resolve();
+          }
+          if (loadedScripts[group.mapKey]) {
+            return Promise.resolve();
+          }
+
+          return new Promise(function (resolve, reject) {
+            var script = document.createElement("script");
+            script.src = "./js/map/province/" + group.mapKey + ".js";
+            script.onload = function () {
+              loadedScripts[group.mapKey] = true;
+              resolve();
+            };
+            script.onerror = function () {
+              reject(new Error("无法加载省级地图脚本: " + group.mapKey));
+            };
+            document.head.appendChild(script);
+          });
+        }
+
+        function findGroupByProvince(name) {
+          for (var i = 0; i < activeProvinceData.length; i += 1) {
+            if (activeProvinceData[i].provinceName === name) {
+              return activeProvinceData[i];
+            }
+          }
+          return null;
+        }
+
+        function bindEvents() {
+          chart.off("click");
+          chart.on("click", function (params) {
+            if (currentView.mapType !== "china") {
+              return;
+            }
+            var group = findGroupByProvince(params.name);
+            if (!group || !group.mapKey) {
+              return;
+            }
+            loadProvinceScript(group)
+              .then(function () {
+                renderProvinceMap(group);
+              })
+              .catch(function () {});
+          });
+        }
+
+        function exportPoster() {
+          if (!window.html2canvas || !exportCanvasNode || !exportButton || !mapNode) {
+            return;
+          }
+
+          var originalText = exportButton.textContent;
+          var exportScale = Math.max(8, (window.devicePixelRatio || 1) * 4);
+          var exportWidth = exportCanvasNode.scrollWidth;
+          var exportHeight = exportCanvasNode.scrollHeight;
+          var exportMapImage = document.createElement("img");
+          var exportMapPixelRatio = Math.max(6, (window.devicePixelRatio || 1) * 3);
+
+          exportMapImage.className = "export-map-image";
+          exportMapImage.alt = "";
+          exportMapImage.src = chart.getDataURL({
+            type: "png",
+            pixelRatio: exportMapPixelRatio,
+            backgroundColor: "#ffffff",
+            excludeComponents: ["toolbox"]
+          });
+
+          exportCanvasNode.classList.add("exporting");
+          mapNode.classList.add("exporting-map");
+          mapNode.appendChild(exportMapImage);
+          exportButton.disabled = true;
+          exportButton.textContent = "导出中...";
+
+          html2canvas(exportCanvasNode, {
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            scale: exportScale,
+            width: exportWidth,
+            height: exportHeight,
+            windowWidth: exportWidth,
+            windowHeight: exportHeight
+          })
+            .then(function (canvas) {
+              var link = document.createElement("a");
+              var date = new Date();
+              var stamp =
+                date.getFullYear() +
+                String(date.getMonth() + 1).padStart(2, "0") +
+                String(date.getDate()).padStart(2, "0") +
+                "-" +
+                String(date.getHours()).padStart(2, "0") +
+                String(date.getMinutes()).padStart(2, "0") +
+                String(date.getSeconds()).padStart(2, "0");
+              link.download = "china-student-map-" + stamp + ".png";
+              link.href = canvas.toDataURL("image/png");
+              link.click();
+            })
+            .catch(function () {})
+            .finally(function () {
+              if (exportMapImage.parentNode === mapNode) {
+                mapNode.removeChild(exportMapImage);
+              }
+              mapNode.classList.remove("exporting-map");
+              exportCanvasNode.classList.remove("exporting");
+              exportButton.disabled = false;
+              exportButton.textContent = originalText;
+            });
+        }
+
+        function loadWorkbookAndRender() {
+          fetch("./pic/Q220101/class.xlsx")
+            .then(function (response) {
+              if (!response.ok) {
+                throw new Error("读取 class.xlsx 失败，HTTP " + response.status);
+              }
+              return response.arrayBuffer();
+            })
+            .then(function (buffer) {
+              var rows = parseWorkbook(buffer);
+              studentCards = buildStudentCards(rows);
+              activeProvinceData = buildProvinceGroups(rows);
+              nationalData = buildMapData(activeProvinceData);
+              updateSummary(activeProvinceData);
+              renderSidebar(studentCards);
+              renderChinaMap();
+              bindEvents();
+            })
+            .catch(function () {});
+        }
+
+        backButton.addEventListener("click", function () {
+          renderChinaMap();
+          bindEvents();
+        });
+
+        exportButton.addEventListener("click", function () {
+          exportPoster();
+        });
+
+        window.addEventListener("resize", function () {
+          chart.resize();
+        });
+
+        loadWorkbookAndRender();
+      })();
+    </script>
+  </body>
+</html>
